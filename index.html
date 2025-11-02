@@ -196,9 +196,7 @@ function renderBoard(){
       var cell=document.createElement('div');
       cell.className='cell'+(d<ys||d>ye?' out':''); cell.style.background=mixColor(base, ratio);
       cell.title=key+(isSingle?(val?' ✓':'' ):(val?' ×'+val:''));
-      cell.onmouseenter = ()=>{ const hEl = document.getElementById('hint'); if(hEl) hEl.textContent = key; };
-      cell.onmouseleave = ()=>{ const hEl = document.getElementById('hint'); if(hEl) hEl.textContent = ''; };
-
+      
       cell.onclick=function(dtKey){
         return function(){
           if(!isSingle){ alert('請先在上方選一個習慣，再點格子打卡。'); return; }
@@ -208,6 +206,7 @@ function renderBoard(){
           save(state); renderBoard();
         };
       }(key);
+                                            
       column.appendChild(cell);
     }
     weeksEl.appendChild(column);
