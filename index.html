@@ -29,6 +29,10 @@
     details{padding:0 12px 12px}
     .habitbar{padding:8px 12px;display:flex;gap:8px;overflow:auto}
     .spacer{flex:1}
+    .board{display:flex;gap:6px;padding:0 12px 16px;overflow:auto}
+    .ylabels{display:flex;flex-direction:column;gap:var(--gap);position:sticky;left:0}
+    .ylabels div{height:var(--cell);line-height:var(--cell);font-size:10px;color:#666;padding-right:4px}
+    .hint{margin:6px 12px;color:#666;font-size:12px}
     .hidden{display:none}
   </style>
 </head>
@@ -49,8 +53,18 @@
 </header>
 
 <div class="habitbar" id="habitBar"></div>
+
+<!-- 新增：一鍵打卡今天 -->
+<button id="markTodayBtn" class="primary">今天 ✓</button>
+
+<!-- 新增：提示目前指到/點到的日期 -->
+<div id="hint" class="hint"></div>
+
 <div class="legend" id="legend"></div>
-<div class="board"><div class="weeks" id="weeks"></div></div>
+<div class="board">
+  <div class="ylabels" id="ylabels"></div>
+  <div class="weeks" id="weeks"></div>
+</div>
 
 <details>
   <summary>新增/管理習慣</summary>
@@ -81,6 +95,16 @@ function load(){ try{ return JSON.parse(localStorage.getItem(StoreKey)) || def()
 function save(s){ localStorage.setItem(StoreKey, JSON.stringify(s)); }
 function def(){ return { habits:[{ id: crypto.randomUUID(), name:'Meditation', color:'#16a34a', days:{} }], selected:null }; }
 function ymd(d){ return d.toISOString().slice(0,10); }
+function renderYLabels(){
+  const y = document.getElementById('ylabels');
+  if(!y) return;
+  y.innerHTML = '';
+  ['日','一','二','三','四','五','六'].forEach(t=>{
+    const d = document.createElement('div');
+    d.textContent = t;
+    y.appendChild(d);
+  });
+}
 
 var state = load();
 var today = new Date();
@@ -172,6 +196,9 @@ function renderBoard(){
       var cell=document.createElement('div');
       cell.className='cell'+(d<ys||d>ye?' out':''); cell.style.background=mixColor(base, ratio);
       cell.title=key+(isSingle?(val?' ✓':'' ):(val?' ×'+val:''));
+      cell.onmouseenter = ()=>{ const hEl = document.getElementById('hint'); if(hEl) hEl.textContent = key; };
+      cell.onmouseleave = ()=>{ const hEl = document.getElementById('hint'); if(hEl) hEl.textContent = ''; };
+
       cell.onclick=function(dtKey){
         return function(){
           if(!isSingle){ alert('請先在上方選一個習慣，再點格子打卡。'); return; }
@@ -187,8 +214,18 @@ function renderBoard(){
   }
 }
 
-function render(){ fillYears(); renderHabits(); renderBoard(); }
+function render(){ fillYears(); renderYLabels(); renderHabits(); renderBoard(); }
 render();
+
+document.getElementById('markTodayBtn').onclick = ()=>{
+  if(state.selected === null){ alert('請先在上方點一個習慣'); return; }
+  const key = ymd(new Date());
+  const h = state.habits.find(x=>x.id===state.selected);
+  if(!h) return;
+  if(h.days[key]) delete h.days[key]; else h.days[key]=1;  // 切換今天
+  save(state);
+  renderBoard();
+};
 
 // ====== 匯出 / 匯入 ======
 document.getElementById('exportBtn').onclick=function(){
