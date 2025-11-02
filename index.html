@@ -64,79 +64,153 @@
 <footer>點格子即可打卡/取消。選擇「全部」＝同一天完成的習慣越多顏色越深。支援離線，iOS 可加到主畫面。</footer>
 
 <script>
-const StoreKey = 'activationBoard.v1';
-const today = new Date();
-const startYear = today.getFullYear() - 2;
-const endYear = today.getFullYear() + 3;
+// ===== Polyfill：某些舊瀏覽器沒有 crypto.randomUUID =====
+if (!('crypto' in window) || !('randomUUID' in crypto)) {
+  window.crypto = window.crypto || {};
+  crypto.randomUUID = function () {
+    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
+      var r = Math.random()*16|0, v = c==='x'? r : (r&0x3|0x8);
+      return v.toString(16);
+    });
+  };
+}
 
-function load() { try { return JSON.parse(localStorage.getItem(StoreKey)) || defaultState() } catch { return defaultState() } }
-function save(state) { localStorage.setItem(StoreKey, JSON.stringify(state)) }
-function defaultState() { return { habits: [ { id: crypto.randomUUID(), name: 'Meditation', color: '#16a34a', days: {} } ], selected: null } }
-function ymd(d){ return d.toISOString().slice(0,10) }
+// ====== App 狀態 ======
+var StoreKey = 'activationBoard.v1';
+function load(){ try{ return JSON.parse(localStorage.getItem(StoreKey)) || def(); }catch(e){ return def(); } }
+function save(s){ localStorage.setItem(StoreKey, JSON.stringify(s)); }
+function def(){ return { habits:[{ id: crypto.randomUUID(), name:'Meditation', color:'#16a34a', days:{} }], selected:null }; }
+function ymd(d){ return d.toISOString().slice(0,10); }
 
-let state = load();
-let currentYear = today.getFullYear();
+var state = load();
+var today = new Date();
+var currentYear = today.getFullYear();
+var startYear = currentYear - 2;
+var endYear = currentYear + 3;
 
-const yearSel = document.getElementById('yearSel');
-for (let y = startYear; y <= endYear; y++) { const opt = document.createElement('option'); opt.value = y; opt.textContent = y; yearSel.appendChild(opt); }
-yearSel.value = currentYear;
-document.getElementById('yearPrev').onclick = ()=>{ currentYear--; yearSel.value=currentYear; render() }
-document.getElementById('yearNext').onclick = ()=>{ currentYear++; yearSel.value=currentYear; render() }
-yearSel.onchange = e => { currentYear = parseInt(e.target.value,10); render() }
+// ====== 年份選單 ======
+var yearSel = document.getElementById('yearSel');
+function fillYears(){
+  yearSel.innerHTML = '';
+  for (var y=startYear;y<=endYear;y++){
+    var o=document.createElement('option'); o.value=y; o.textContent=y; yearSel.appendChild(o);
+  }
+  yearSel.value = currentYear;
+}
+document.getElementById('yearPrev').onclick=function(){ currentYear--; yearSel.value=currentYear; render(); };
+document.getElementById('yearNext').onclick=function(){ currentYear++; yearSel.value=currentYear; render(); };
+yearSel.onchange=function(e){ currentYear=parseInt(e.target.value,10); render(); };
 
-const habitBar = document.getElementById('habitBar');
-function renderHabits() {
-  habitBar.innerHTML = '';
-  const all = document.createElement('div'); all.className = 'chip' + (state.selected===null ? ' active':''); all.textContent = '全部';
-  all.onclick = ()=>{ state.selected=null; save(state); render() }; habitBar.appendChild(all);
-  state.habits.forEach(h=>{
-    const chip = document.createElement('div'); chip.className = 'chip' + (state.selected===h.id ? ' active':'');
-    chip.innerHTML = `<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${h.color};margin-right:6px"></span>${h.name}`;
-    chip.onclick = ()=>{ state.selected=h.id; save(state); render() };
-    chip.oncontextmenu = (e)=>{ e.preventDefault(); if(confirm(\`刪除「${h.name}」？\`)){ state.habits = state.habits.filter(x=>x.id!==h.id); if(state.selected===h.id) state.selected=null; save(state); render() } };
+// ====== 習慣列 ======
+var habitBar = document.getElementById('habitBar');
+function renderHabits(){
+  habitBar.innerHTML='';
+  var all=document.createElement('div'); all.className='chip'+(state.selected===null?' active':''); all.textContent='全部';
+  all.onclick=function(){ state.selected=null; save(state); render(); };
+  habitBar.appendChild(all);
+
+  state.habits.forEach(function(h){
+    var chip=document.createElement('div');
+    chip.className='chip'+(state.selected===h.id?' active':'');
+    chip.innerHTML='<span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:'+h.color+';margin-right:6px"></span>'+h.name;
+    chip.onclick=function(){ state.selected=h.id; save(state); render(); };
+    chip.oncontextmenu=function(e){ e.preventDefault(); if(confirm('刪除「'+h.name+'」？')){ state.habits=state.habits.filter(function(x){return x.id!==h.id}); if(state.selected===h.id) state.selected=null; save(state); render(); } };
     habitBar.appendChild(chip);
   });
 }
-document.getElementById('addHabitBtn').onclick = ()=>{
-  const name = document.getElementById('newHabitName').value.trim() || 'Habit';
-  const color = document.getElementById('newHabitColor').value;
-  state.habits.push({ id: crypto.randomUUID(), name, color, days:{} });
+document.getElementById('addHabitBtn').onclick=function(){
+  var name=document.getElementById('newHabitName').value.trim()||'Habit';
+  var color=document.getElementById('newHabitColor').value;
+  state.habits.push({ id: crypto.randomUUID(), name:name, color:color, days:{} });
   state.selected = state.habits[state.habits.length-1].id;
   document.getElementById('newHabitName').value='';
   save(state); render();
 };
 
-const weeksEl = document.getElementById('weeks'); const legendEl = document.getElementById('legend');
-function firstSunday(d){ const ds = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const wd = ds.getDay(); ds.setDate(ds.getDate() - wd); return ds; }
-function lastSaturday(d){ const de = new Date(d.getFullYear(), d.getMonth(), d.getDate()); const wd = de.getDay(); de.setDate(de.getDate() + (6 - wd)); return de; }
-function daysBetween(a,b){ const out=[]; const d = new Date(a); while(d<=b){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
-function mixColor(hex, ratio){ if(ratio<=0.0001) return '#e5e7eb'; const c = hex.replace('#',''); const r = parseInt(c.slice(0,2),16), g = parseInt(c.slice(2,4),16), b = parseInt(c.slice(4,6),16); const rr = Math.round(ratio*r + (1-ratio)*229); const gg = Math.round(ratio*g + (1-ratio)*231); const bb = Math.round(ratio*b + (1-ratio)*235); return `rgb(${rr},${gg},${bb})`; }
-function renderLegend(base){ legendEl.innerHTML = '強度：'; const steps = 5; for(let i=0;i<steps;i++){ const c = document.createElement('div'); c.className='cell'; c.style.background = mixColor(base, i/(steps-1)); legendEl.appendChild(c); } }
+// ====== 日曆熱圖 ======
+var weeksEl=document.getElementById('weeks');
+var legendEl=document.getElementById('legend');
+
+function firstSunday(d){ var s=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var w=s.getDay(); s.setDate(s.getDate()-w); return s; }
+function lastSaturday(d){ var e=new Date(d.getFullYear(),d.getMonth(),d.getDate()); var w=e.getDay(); e.setDate(e.getDate()+(6-w)); return e; }
+function daysBetween(a,b){ var out=[], d=new Date(a); while(d<=b){ out.push(new Date(d)); d.setDate(d.getDate()+1); } return out; }
+function mixColor(hex,ratio){
+  if(ratio<=0.0001) return '#e5e7eb';
+  var c=hex.replace('#','');
+  var r=parseInt(c.slice(0,2),16), g=parseInt(c.slice(2,4),16), b=parseInt(c.slice(4,6),16);
+  var rr=Math.round(ratio*r+(1-ratio)*229), gg=Math.round(ratio*g+(1-ratio)*231), bb=Math.round(ratio*b+(1-ratio)*235);
+  return 'rgb('+rr+','+gg+','+bb+')';
+}
+function renderLegend(base){
+  legendEl.innerHTML='強度：';
+  for(var i=0;i<5;i++){ var c=document.createElement('div'); c.className='cell'; c.style.background=mixColor(base, i/4); legendEl.appendChild(c); }
+}
+
 function renderBoard(){
   weeksEl.innerHTML='';
-  const yearStart = new Date(currentYear,0,1); const yearEnd   = new Date(currentYear,11,31);
-  const gridStart = firstSunday(yearStart); const gridEnd   = lastSaturday(yearEnd); const dates = daysBetween(gridStart, gridEnd);
-  const isSingle = state.selected !== null; let baseColor = '#16a34a'; let map = {};
-  if(isSingle){ const h = state.habits.find(x=>x.id===state.selected); baseColor = h?.color || baseColor; if(h){ Object.keys(h.days).forEach(k=>map[k]=1); } }
-  else{ state.habits.forEach(h=>{ Object.keys(h.days).forEach(k=>{ map[k]=(map[k]||0)+1; }) }); baseColor = '#16a34a'; }
-  const maxIntensity = Math.max(1, ...Object.values(map), 1); renderLegend(baseColor);
-  for(let col=0; col<dates.length; col+=7){
-    const column = document.createElement('div'); column.className='col';
-    for(let row=0; row<7; row++){
-      const d = dates[col+row]; const key = ymd(d); const val = map[key] || 0; const ratio = isSingle ? (val>0?1:0) : (val/maxIntensity);
-      const cell = document.createElement('div'); cell.className='cell' + (d<yearStart || d>yearEnd ? ' out': ''); cell.style.background = mixColor(baseColor, ratio);
-      cell.title = `${key}  ${isSingle? (val? '✓':'' ) : (val? '×'+val:'')}`;
-      cell.onclick = ()=>{ if(!isSingle) return; const h = state.habits.find(x=>x.id===state.selected); if(!h) return; if(h.days[key]) delete h.days[key]; else h.days[key]=1; save(state); renderBoard(); };
+  var ys=new Date(currentYear,0,1), ye=new Date(currentYear,11,31);
+  var gs=firstSunday(ys), ge=lastSaturday(ye), dates=daysBetween(gs,ge);
+
+  var isSingle = state.selected!==null;
+  var base = '#16a34a'; var map={};
+  if(isSingle){
+    var h = state.habits.find(function(x){ return x.id===state.selected; });
+    base = (h && h.color) || base;
+    if(h){ Object.keys(h.days).forEach(function(k){ map[k]=1; }); }
+  }else{
+    state.habits.forEach(function(h){ Object.keys(h.days).forEach(function(k){ map[k]=(map[k]||0)+1; }); });
+  }
+  var maxI = Math.max(1).concat ? 1 : 1; // 保險，不用展開運算子
+  Object.keys(map).forEach(function(k){ if(map[k]>maxI) maxI=map[k]; });
+  renderLegend(base);
+
+  for(var col=0; col<dates.length; col+=7){
+    var column=document.createElement('div'); column.className='col';
+    for(var row=0; row<7; row++){
+      var d=dates[col+row], key=ymd(d), val=map[key]||0;
+      var ratio = isSingle ? (val>0?1:0) : (val/maxI);
+      var cell=document.createElement('div');
+      cell.className='cell'+(d<ys||d>ye?' out':''); cell.style.background=mixColor(base, ratio);
+      cell.title=key+(isSingle?(val?' ✓':'' ):(val?' ×'+val:''));
+      cell.onclick=function(dtKey){
+        return function(){
+          if(!isSingle){ alert('請先在上方選一個習慣，再點格子打卡。'); return; }
+          var hh = state.habits.find(function(x){ return x.id===state.selected; });
+          if(!hh) return;
+          if(hh.days[dtKey]) delete hh.days[dtKey]; else hh.days[dtKey]=1;
+          save(state); renderBoard();
+        };
+      }(key);
       column.appendChild(cell);
     }
     weeksEl.appendChild(column);
   }
 }
-function render(){ renderHabits(); renderBoard(); } render();
-document.getElementById('exportBtn').onclick = ()=>{ const blob = new Blob([JSON.stringify(state,null,2)], {type:'application/json;charset=utf-8'}); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `activation-board-${Date.now()}.json`; a.click(); URL.revokeObjectURL(a.href); };
-const importFile = document.getElementById('importFile'); document.getElementById('importBtn').onclick = ()=> importFile.click();
-importFile.onchange = async (e)=>{ const f = e.target.files[0]; if(!f) return; try{ const txt = await f.text(); const obj = JSON.parse(txt); if(!obj.habits) throw new Error('格式不正確'); state = obj; save(state); render(); }catch(err){ alert('匯入失敗：'+err.message); } };
-if('serviceWorker' in navigator){ window.addEventListener('load', ()=> navigator.serviceWorker.register('./sw.js') ); }
+
+function render(){ fillYears(); renderHabits(); renderBoard(); }
+render();
+
+// ====== 匯出 / 匯入 ======
+document.getElementById('exportBtn').onclick=function(){
+  var blob=new Blob([JSON.stringify(state,null,2)], {type:'application/json;charset=utf-8'});
+  var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='activation-board-'+Date.now()+'.json'; a.click(); URL.revokeObjectURL(a.href);
+};
+var importFile=document.getElementById('importFile');
+document.getElementById('importBtn').onclick=function(){ importFile.click(); };
+importFile.onchange=function(e){
+  var f=e.target.files[0]; if(!f) return;
+  f.text().then(function(txt){
+    var obj=JSON.parse(txt);
+    if(!obj.habits) throw new Error('格式不正確');
+    state=obj; save(state); render();
+  }).catch(function(err){ alert('匯入失敗：'+err.message); });
+};
+
+// ====== 註冊 Service Worker ======
+if('serviceWorker' in navigator){
+  window.addEventListener('load', function(){ navigator.serviceWorker.register('./sw.js'); });
+}
 </script>
+
 </body>
 </html>
